@@ -14,15 +14,39 @@ logger = logging.getLogger(__name__)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued."""
     user = update.effective_user
-    await update.message.reply_html(
-        f"Hi {user.mention_html()}! \n"
-        "I can help you check your Vignan ECAP attendance.\n\n"
-        "**How to use:**\n"
-        "• Send your credentials: `rollnumber password`\n"
-        "• Example: `23l31a4391 mypassword`\n\n"
-        "You can check multiple accounts by sending different credentials!",
-        parse_mode='Markdown'
+    welcome_message = (
+        f"👋 Hi {user.mention_html()}!\n\n"
+        "🎓 <b>Welcome to Vignan ECAP Attendance Bot!</b>\n\n"
+        "I can help you quickly check your attendance from the Vignan College ECAP portal. "
+        "Get instant updates on your attendance percentage, subject-wise details, and today's attendance!\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "<b>📖 HOW TO USE:</b>\n\n"
+        "1️⃣ Send your ECAP credentials in this format:\n"
+        "   <code>rollnumber password</code>\n\n"
+        "2️⃣ Example:\n"
+        "   <code>23L31A4391 mypassword</code>\n\n"
+        "3️⃣ Wait for the bot to fetch your attendance data\n\n"
+        "4️⃣ Use the 🔄 <b>Refresh</b> button to update your data anytime\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "<b>🔒 SECURITY NOTE:</b>\n"
+        "• Your credentials are automatically deleted after sending\n"
+        "• Credentials are stored temporarily only for the refresh feature\n"
+        "• Use /cancel to clear all stored sessions\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "<b>📋 AVAILABLE COMMANDS:</b>\n"
+        "/start - Show this welcome message\n"
+        "/cancel - Clear all stored sessions\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "<b>✨ FEATURES:</b>\n"
+        "✅ Subject-wise attendance percentage\n"
+        "✅ Today's attendance status\n"
+        "✅ Skippable hours calculation (to maintain 75%)\n"
+        "✅ Quick refresh button for real-time updates\n"
+        "✅ Support for multiple accounts\n\n"
+        "💡 <i>Tip: You can check multiple accounts by sending different credentials!</i>\n\n"
+        "Ready to get started? Just send your credentials! 🚀"
     )
+    await update.message.reply_html(welcome_message)
 
 async def handle_credentials(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle credentials sent as a message (username password)."""
