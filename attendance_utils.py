@@ -1,5 +1,5 @@
 from bs4 import BeautifulSoup
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 def parse_attendance(html_content):
     soup = BeautifulSoup(html_content, 'html.parser')
@@ -66,7 +66,7 @@ def parse_attendance(html_content):
         'total_classes': total_classes,
         'total_present': total_present,
         'overall_percent': overall_percent,
-        'last_updated': datetime.now().strftime("%d/%m/%Y, %I:%M:%S %p")
+        'last_updated': datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%d/%m/%Y, %I:%M:%S %p")
     }
     
     return data

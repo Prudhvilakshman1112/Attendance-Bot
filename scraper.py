@@ -175,7 +175,7 @@ class ECAPScraper:
     def get_todays_attendance(self):
         """Fetch today's attendance (P/A status) from Academic Register page"""
         try:
-            from datetime import datetime
+            from datetime import datetime, timezone, timedelta
             
             # The correct URL from FillScreens response
             register_url = config.BASE_URL + "Academics/studentacadamicregister.aspx?scrid=2"
@@ -223,8 +223,9 @@ class ECAPScraper:
             header_row = rows[0]
             date_cells = header_row.find_all(['td', 'th'])
             
-            # Find today's date column
-            today = datetime.now()
+            # Find today's date column using IST timezone
+            ist = timezone(timedelta(hours=5, minutes=30))
+            today = datetime.now(ist)
             today_str = f"{today.day:02d}/{today.month:02d}"  # Format: DD/MM
             
             print(f"Looking for today's date: {today_str}")
