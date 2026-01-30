@@ -1,4 +1,6 @@
 import logging
+import os
+from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 import config
@@ -10,6 +12,12 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+# Initialize Flask app
+app = Flask(__name__)
+
+# Initialize Telegram bot application globally
+ptb_app = Application.builder().token(config.BOT_TOKEN).build()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued."""
@@ -197,21 +205,42 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     else:
         await update.message.reply_text("No active sessions to clear.")
 
+# Register handlers globally
+ptb_app.add_handler(CommandHandler("start", start))
+ptb_app.add_handler(CommandHandler("cancel", cancel))
+ptb_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_credentials))
+ptb_app.add_handler(CallbackQueryHandler(refresh_button_handler, pattern="^refresh_"))
+
+@app.route('/webhook', methods=['POST'])
+async def webhook():
+    """Handle incoming Telegram updates via webhook."""
+    if request.method == "POST":
+        # Parse the incoming update
+        update = Update.de_json(request.get_json(force=True), ptb_app.bot)
+        # Process the update
+        await ptb_app.process_update(update)
+    return "ok", 200
+
+@app.route('/')
+def index():
+    """Health check endpoint for Render."""
+    return "Attendance Bot is Running ✅", 200
+
 def main() -> None:
-    """Run the bot."""
-    application = Application.builder().token(config.BOT_TOKEN).build()
-
-    # Add handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("cancel", cancel))
-    
-    # Handle any text message as potential credentials
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_credentials))
-    
-    # Handle refresh button clicks (pattern matches any refresh_*)
-    application.add_handler(CallbackQueryHandler(refresh_button_handler, pattern="^refresh_"))
-
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    """Run the bot in polling mode (for local testing only)."""
+    logger.info("Starting bot in POLLING mode (local testing)")
+    ptb_app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
-    main()
+    # Check if we should use polling mode (for local testing)
+    USE_POLLING = os.getenv("USE_POLLING", "false").lower() == "true"
+    
+    if USE_POLLING:
+        # Local testing with polling
+        main()
+    else:
+        # Production mode with Flask/webhook
+        # Render will use Gunicorn to run the Flask app
+        port = int(os.getenv("PORT", 8000))
+        logger.info(f"Starting Flask app on port {port}")
+        app.run(host="0.0.0.0", port=port)

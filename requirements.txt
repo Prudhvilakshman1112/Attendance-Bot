@@ -3,3 +3,5 @@ beautifulsoup4
 python-telegram-bot
 python-dotenv
 pycryptodome
+flask
+gunicorn
