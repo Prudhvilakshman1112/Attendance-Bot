@@ -253,22 +253,37 @@ ptb_app.add_handler(CommandHandler("cancel", cancel))
 ptb_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_credentials))
 ptb_app.add_handler(CallbackQueryHandler(refresh_button_handler, pattern="^refresh_"))
 
-# Start the event loop when the module loads
-start_event_loop()
+# Lock for thread-safe initialization
+_init_lock = threading.Lock()
+_initialized = False
+
+def ensure_event_loop_started():
+    """Ensure the event loop is started (called lazily on first request)."""
+    global _initialized
+    if not _initialized:
+        with _init_lock:
+            if not _initialized:  # Double-check inside lock
+                logger.info("Starting event loop for the first time in this worker")
+                start_event_loop()
+                # Wait for queue to be ready
+                import time
+                timeout = 10
+                start_time = time.time()
+                while update_queue is None and (time.time() - start_time) < timeout:
+                    time.sleep(0.1)
+                _initialized = True
+                logger.info("Event loop initialization complete")
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
     """Handle incoming Telegram updates via webhook."""
     logger.info("Webhook endpoint called")
+    
+    # Ensure event loop is started (lazy initialization)
+    ensure_event_loop_started()
+    
     if request.method == "POST":
         try:
-            # Wait for queue to be initialized
-            import time
-            timeout = 10
-            start_time = time.time()
-            while update_queue is None and (time.time() - start_time) < timeout:
-                time.sleep(0.1)
-            
             if update_queue is None:
                 logger.error("Update queue not initialized!")
                 return "Queue not ready", 503
