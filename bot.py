@@ -39,7 +39,7 @@ def start_event_loop():
         while True:
             try:
                 logger.info("Waiting for update from queue...")
-                update = update_queue.get()
+                update = await update_queue.get()  # Use await for async queue
                 if update is None:  # Shutdown signal
                     break
                 logger.info(f"Processing update: {update.update_id}")
@@ -264,8 +264,8 @@ def webhook():
             # Parse the incoming update
             update = Update.de_json(json_data, ptb_app.bot)
             logger.info(f"Parsed update, adding to queue. Queue size: {update_queue.qsize()}")
-            # Add update to async queue from sync context
-            asyncio.run_coroutine_threadsafe(update_queue.put(update), _loop)
+            # Add update to async queue from sync context using call_soon_threadsafe
+            _loop.call_soon_threadsafe(update_queue.put_nowait, update)
             logger.info("Update added to queue successfully")
         except Exception as e:
             logger.error(f"Error in webhook handler: {e}", exc_info=True)
