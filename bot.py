@@ -39,10 +39,13 @@ def start_event_loop():
         
         while True:
             try:
+                logger.info("Waiting for update from queue...")
                 update = update_queue.get()
                 if update is None:  # Shutdown signal
                     break
+                logger.info(f"Processing update: {update.update_id}")
                 await ptb_app.process_update(update)
+                logger.info(f"Update {update.update_id} processed successfully")
             except Exception as e:
                 logger.error(f"Error processing update: {e}", exc_info=True)
     
@@ -254,11 +257,19 @@ start_event_loop()
 @app.route('/webhook', methods=['POST'])
 def webhook():
     """Handle incoming Telegram updates via webhook."""
+    logger.info("Webhook endpoint called")
     if request.method == "POST":
-        # Parse the incoming update
-        update = Update.de_json(request.get_json(force=True), ptb_app.bot)
-        # Add update to queue for processing
-        update_queue.put(update)
+        try:
+            json_data = request.get_json(force=True)
+            logger.info(f"Received update: {json_data}")
+            # Parse the incoming update
+            update = Update.de_json(json_data, ptb_app.bot)
+            logger.info(f"Parsed update, adding to queue. Queue size: {update_queue.qsize()}")
+            # Add update to queue for processing
+            update_queue.put(update)
+            logger.info("Update added to queue successfully")
+        except Exception as e:
+            logger.error(f"Error in webhook handler: {e}", exc_info=True)
     return "ok", 200
 
 @app.route('/')
