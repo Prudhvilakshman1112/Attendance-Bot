@@ -34,17 +34,14 @@ def start_event_loop():
         """Process updates from the queue."""
         await ptb_app.initialize()
         await ptb_app.start()
-        logger.info("Bot application initialized successfully")
+        logger.info("Bot initialized and ready")
         
         while True:
             try:
-                logger.info("Waiting for update from queue...")
-                update = await update_queue.get()  # Use await for async queue
-                if update is None:  # Shutdown signal
+                update = await update_queue.get()
+                if update is None:
                     break
-                logger.info(f"Processing update: {update.update_id}")
                 await ptb_app.process_update(update)
-                logger.info(f"Update {update.update_id} processed successfully")
             except Exception as e:
                 logger.error(f"Error processing update: {e}", exc_info=True)
     
@@ -52,14 +49,11 @@ def start_event_loop():
         global _loop, update_queue
         _loop = asyncio.new_event_loop()
         asyncio.set_event_loop(_loop)
-        # Create the queue in the event loop BEFORE starting process_updates
         update_queue = asyncio.Queue()
-        logger.info("Queue created in event loop")
         _loop.run_until_complete(process_updates())
     
     _loop_thread = threading.Thread(target=run_loop, daemon=True)
     _loop_thread.start()
-    logger.info("Event loop started in background thread")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued."""
@@ -262,8 +256,7 @@ def ensure_event_loop_started():
     global _initialized
     if not _initialized:
         with _init_lock:
-            if not _initialized:  # Double-check inside lock
-                logger.info("Starting event loop for the first time in this worker")
+            if not _initialized:
                 start_event_loop()
                 # Wait for queue to be ready
                 import time
@@ -272,32 +265,24 @@ def ensure_event_loop_started():
                 while update_queue is None and (time.time() - start_time) < timeout:
                     time.sleep(0.1)
                 _initialized = True
-                logger.info("Event loop initialization complete")
+                logger.info("Bot ready to process updates")
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
     """Handle incoming Telegram updates via webhook."""
-    logger.info("Webhook endpoint called")
-    
-    # Ensure event loop is started (lazy initialization)
     ensure_event_loop_started()
     
     if request.method == "POST":
         try:
             if update_queue is None:
-                logger.error("Update queue not initialized!")
+                logger.error("Update queue not initialized")
                 return "Queue not ready", 503
             
             json_data = request.get_json(force=True)
-            logger.info(f"Received update: {json_data}")
-            # Parse the incoming update
             update = Update.de_json(json_data, ptb_app.bot)
-            logger.info(f"Parsed update, adding to queue. Queue size: {update_queue.qsize()}")
-            # Add update to async queue from sync context using call_soon_threadsafe
             _loop.call_soon_threadsafe(update_queue.put_nowait, update)
-            logger.info("Update added to queue successfully")
         except Exception as e:
-            logger.error(f"Error in webhook handler: {e}", exc_info=True)
+            logger.error(f"Webhook error: {e}", exc_info=True)
     return "ok", 200
 
 @app.route('/')
