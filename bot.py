@@ -20,6 +20,18 @@ app = Flask(__name__)
 # Initialize Telegram bot application globally
 ptb_app = Application.builder().token(config.BOT_TOKEN).build()
 
+# Track initialization status
+_initialized = False
+
+async def initialize_bot():
+    """Initialize the bot application if not already initialized."""
+    global _initialized
+    if not _initialized:
+        await ptb_app.initialize()
+        await ptb_app.start()
+        _initialized = True
+        logger.info("Bot application initialized successfully")
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued."""
     user = update.effective_user
@@ -216,6 +228,8 @@ ptb_app.add_handler(CallbackQueryHandler(refresh_button_handler, pattern="^refre
 def webhook():
     """Handle incoming Telegram updates via webhook."""
     if request.method == "POST":
+        # Initialize bot if needed
+        asyncio.run(initialize_bot())
         # Parse the incoming update
         update = Update.de_json(request.get_json(force=True), ptb_app.bot)
         # Process the update asynchronously
