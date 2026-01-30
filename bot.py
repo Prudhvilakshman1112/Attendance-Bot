@@ -2,7 +2,6 @@ import logging
 import os
 import asyncio
 import threading
-from queue import Queue
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
@@ -22,8 +21,8 @@ app = Flask(__name__)
 # Initialize Telegram bot application globally
 ptb_app = Application.builder().token(config.BOT_TOKEN).build()
 
-# Queue for updates and event loop management
-update_queue = Queue()
+# Queue for updates and event loop management (using asyncio Queue)
+update_queue = asyncio.Queue()
 _loop = None
 _loop_thread = None
 
@@ -265,8 +264,8 @@ def webhook():
             # Parse the incoming update
             update = Update.de_json(json_data, ptb_app.bot)
             logger.info(f"Parsed update, adding to queue. Queue size: {update_queue.qsize()}")
-            # Add update to queue for processing
-            update_queue.put(update)
+            # Add update to async queue from sync context
+            asyncio.run_coroutine_threadsafe(update_queue.put(update), _loop)
             logger.info("Update added to queue successfully")
         except Exception as e:
             logger.error(f"Error in webhook handler: {e}", exc_info=True)
