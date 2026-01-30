@@ -1,6 +1,8 @@
 import logging
 import os
 import asyncio
+import threading
+from queue import Queue
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
@@ -20,17 +22,39 @@ app = Flask(__name__)
 # Initialize Telegram bot application globally
 ptb_app = Application.builder().token(config.BOT_TOKEN).build()
 
-# Track initialization status
-_initialized = False
+# Queue for updates and event loop management
+update_queue = Queue()
+_loop = None
+_loop_thread = None
 
-async def initialize_bot():
-    """Initialize the bot application if not already initialized."""
-    global _initialized
-    if not _initialized:
+def start_event_loop():
+    """Start the event loop in a separate thread."""
+    global _loop, _loop_thread
+    
+    async def process_updates():
+        """Process updates from the queue."""
         await ptb_app.initialize()
         await ptb_app.start()
-        _initialized = True
         logger.info("Bot application initialized successfully")
+        
+        while True:
+            try:
+                update = update_queue.get()
+                if update is None:  # Shutdown signal
+                    break
+                await ptb_app.process_update(update)
+            except Exception as e:
+                logger.error(f"Error processing update: {e}", exc_info=True)
+    
+    def run_loop():
+        global _loop
+        _loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(_loop)
+        _loop.run_until_complete(process_updates())
+    
+    _loop_thread = threading.Thread(target=run_loop, daemon=True)
+    _loop_thread.start()
+    logger.info("Event loop started in background thread")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued."""
@@ -224,16 +248,17 @@ ptb_app.add_handler(CommandHandler("cancel", cancel))
 ptb_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_credentials))
 ptb_app.add_handler(CallbackQueryHandler(refresh_button_handler, pattern="^refresh_"))
 
+# Start the event loop when the module loads
+start_event_loop()
+
 @app.route('/webhook', methods=['POST'])
 def webhook():
     """Handle incoming Telegram updates via webhook."""
     if request.method == "POST":
-        # Initialize bot if needed
-        asyncio.run(initialize_bot())
         # Parse the incoming update
         update = Update.de_json(request.get_json(force=True), ptb_app.bot)
-        # Process the update asynchronously
-        asyncio.run(ptb_app.process_update(update))
+        # Add update to queue for processing
+        update_queue.put(update)
     return "ok", 200
 
 @app.route('/')
