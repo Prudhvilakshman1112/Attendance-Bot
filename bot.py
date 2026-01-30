@@ -1,5 +1,6 @@
 import logging
 import os
+import asyncio
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
@@ -212,13 +213,13 @@ ptb_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_crede
 ptb_app.add_handler(CallbackQueryHandler(refresh_button_handler, pattern="^refresh_"))
 
 @app.route('/webhook', methods=['POST'])
-async def webhook():
+def webhook():
     """Handle incoming Telegram updates via webhook."""
     if request.method == "POST":
         # Parse the incoming update
         update = Update.de_json(request.get_json(force=True), ptb_app.bot)
-        # Process the update
-        await ptb_app.process_update(update)
+        # Process the update asynchronously
+        asyncio.run(ptb_app.process_update(update))
     return "ok", 200
 
 @app.route('/')
