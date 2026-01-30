@@ -32,10 +32,6 @@ def start_event_loop():
     
     async def process_updates():
         """Process updates from the queue."""
-        global update_queue
-        # Create the queue in the event loop thread
-        update_queue = asyncio.Queue()
-        
         await ptb_app.initialize()
         await ptb_app.start()
         logger.info("Bot application initialized successfully")
@@ -53,9 +49,12 @@ def start_event_loop():
                 logger.error(f"Error processing update: {e}", exc_info=True)
     
     def run_loop():
-        global _loop
+        global _loop, update_queue
         _loop = asyncio.new_event_loop()
         asyncio.set_event_loop(_loop)
+        # Create the queue in the event loop BEFORE starting process_updates
+        update_queue = asyncio.Queue()
+        logger.info("Queue created in event loop")
         _loop.run_until_complete(process_updates())
     
     _loop_thread = threading.Thread(target=run_loop, daemon=True)
