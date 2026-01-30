@@ -21,17 +21,21 @@ app = Flask(__name__)
 # Initialize Telegram bot application globally
 ptb_app = Application.builder().token(config.BOT_TOKEN).build()
 
-# Queue for updates and event loop management (using asyncio Queue)
-update_queue = asyncio.Queue()
+# Queue for updates and event loop management (will be created in event loop thread)
+update_queue = None
 _loop = None
 _loop_thread = None
 
 def start_event_loop():
     """Start the event loop in a separate thread."""
-    global _loop, _loop_thread
+    global _loop, _loop_thread, update_queue
     
     async def process_updates():
         """Process updates from the queue."""
+        global update_queue
+        # Create the queue in the event loop thread
+        update_queue = asyncio.Queue()
+        
         await ptb_app.initialize()
         await ptb_app.start()
         logger.info("Bot application initialized successfully")
@@ -259,6 +263,17 @@ def webhook():
     logger.info("Webhook endpoint called")
     if request.method == "POST":
         try:
+            # Wait for queue to be initialized
+            import time
+            timeout = 10
+            start_time = time.time()
+            while update_queue is None and (time.time() - start_time) < timeout:
+                time.sleep(0.1)
+            
+            if update_queue is None:
+                logger.error("Update queue not initialized!")
+                return "Queue not ready", 503
+            
             json_data = request.get_json(force=True)
             logger.info(f"Received update: {json_data}")
             # Parse the incoming update
