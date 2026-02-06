@@ -257,6 +257,7 @@ def ensure_event_loop_started():
     if not _initialized:
         with _init_lock:
             if not _initialized:
+                logger.info("Starting event loop thread...")
                 start_event_loop()
                 # Wait for queue to be ready
                 import time
@@ -264,6 +265,12 @@ def ensure_event_loop_started():
                 start_time = time.time()
                 while update_queue is None and (time.time() - start_time) < timeout:
                     time.sleep(0.1)
+                
+                if update_queue is None:
+                    logger.error("CRITICAL: Event loop failed to initialize within timeout!")
+                else:
+                    logger.info("Event loop initialized successfully")
+                    
                 _initialized = True
                 logger.info("Bot ready to process updates")
 
@@ -275,14 +282,17 @@ def webhook():
     if request.method == "POST":
         try:
             if update_queue is None:
-                logger.error("Update queue not initialized")
+                logger.error("Update queue not initialized - event loop may have failed to start")
                 return "Queue not ready", 503
             
             json_data = request.get_json(force=True)
+            logger.info(f"Received webhook update: {json_data.get('update_id', 'unknown')}")
             update = Update.de_json(json_data, ptb_app.bot)
             _loop.call_soon_threadsafe(update_queue.put_nowait, update)
+            logger.info("Update queued successfully")
         except Exception as e:
             logger.error(f"Webhook error: {e}", exc_info=True)
+            return "Error processing update", 500
     return "ok", 200
 
 @app.route('/')
