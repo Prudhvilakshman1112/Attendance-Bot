@@ -35,6 +35,7 @@ preload_app = False
 # Graceful timeout for worker shutdown
 graceful_timeout = 30
 
-# Max requests per worker before restart (helps prevent memory leaks)
-max_requests = 1000
-max_requests_jitter = 50
+# Max requests per worker before restart (disabled – set to 0 = no limit)
+# Enabling this would restart the worker periodically and wipe in-memory state.
+# max_requests = 1000
+# max_requests_jitter = 50

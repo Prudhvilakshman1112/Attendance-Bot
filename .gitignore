@@ -12,3 +12,6 @@ build/
 .vscode/
 .idea/
 TIMESTAMP_FIX.md
+user_credentials.json
+debug_*.html
+debug_*.txt

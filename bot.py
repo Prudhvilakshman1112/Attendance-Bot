@@ -2,12 +2,65 @@ import logging
 import os
 import asyncio
 import threading
+import json
+import time
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 import config
 from scraper import ECAPScraper
 from attendance_utils import parse_attendance, format_message
+
+# ---------------------------------------------------------------------------
+# Persistent credential store
+# Credentials are saved to a JSON file so they survive process restarts.
+# ---------------------------------------------------------------------------
+CREDS_FILE = os.path.join(os.path.dirname(__file__), "user_credentials.json")
+_creds_lock = threading.Lock()
+
+def _load_creds() -> dict:
+    """Load all credentials from disk."""
+    try:
+        with open(CREDS_FILE, "r") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+def _save_creds(data: dict):
+    """Persist all credentials to disk."""
+    with open(CREDS_FILE, "w") as f:
+        json.dump(data, f)
+
+def store_user_cred(telegram_user_id: int, username: str, password: str):
+    """Store a credential entry for a Telegram user."""
+    with _creds_lock:
+        data = _load_creds()
+        uid = str(telegram_user_id)
+        if uid not in data:
+            data[uid] = {}
+        data[uid][username] = password
+        _save_creds(data)
+
+def get_user_cred(telegram_user_id: int, username: str):
+    """Return stored password or None."""
+    with _creds_lock:
+        data = _load_creds()
+        return data.get(str(telegram_user_id), {}).get(username)
+
+def get_all_user_creds(telegram_user_id: int) -> dict:
+    """Return all stored credentials for a Telegram user."""
+    with _creds_lock:
+        data = _load_creds()
+        return data.get(str(telegram_user_id), {})
+
+def clear_user_creds(telegram_user_id: int) -> int:
+    """Remove all credentials for a Telegram user and return how many were removed."""
+    with _creds_lock:
+        data = _load_creds()
+        uid = str(telegram_user_id)
+        count = len(data.pop(uid, {}))
+        _save_creds(data)
+        return count
 
 # Enable logging
 logging.basicConfig(
@@ -150,12 +203,8 @@ async def handle_credentials(update: Update, context: ContextTypes.DEFAULT_TYPE)
         # Format message
         message = format_message(data, username, todays_attendance)
         
-        # Store credentials for this user (for refresh functionality)
-        # Use username as key to support multiple users
-        if 'users' not in context.user_data:
-            context.user_data['users'] = {}
-        
-        context.user_data['users'][username] = password
+        # Persist credentials to disk so they survive restarts
+        store_user_cred(update.effective_user.id, username, password)
         
         # Create refresh button with username in callback data
         keyboard = [[InlineKeyboardButton("🔄 Refresh", callback_data=f"refresh_{username}")]]
@@ -179,15 +228,14 @@ async def refresh_button_handler(update: Update, context: ContextTypes.DEFAULT_T
     
     username = callback_data.replace("refresh_", "")
     
-    # Check if we have stored credentials for this user
-    if 'users' not in context.user_data or username not in context.user_data['users']:
+    # Check if we have stored credentials for this user (loaded from disk)
+    password = get_user_cred(query.from_user.id, username)
+    if not password:
         await query.edit_message_text(
             text=f"❌ Session expired for {username}.\n\nPlease send credentials again: `{username} password`",
             parse_mode='Markdown'
         )
         return
-    
-    password = context.user_data['users'][username]
     
     # Update status
     await query.edit_message_text(f"🔄 Refreshing data for {username}...")
@@ -233,10 +281,9 @@ async def refresh_button_handler(update: Update, context: ContextTypes.DEFAULT_T
         logger.error(f"Error during refresh for {username}: {e}", exc_info=True)
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Clear all stored credentials."""
-    if 'users' in context.user_data:
-        count = len(context.user_data['users'])
-        context.user_data['users'] = {}
+    """Clear all stored credentials from disk."""
+    count = clear_user_creds(update.effective_user.id)
+    if count:
         await update.message.reply_text(f"✅ Cleared {count} stored session(s).")
     else:
         await update.message.reply_text("No active sessions to clear.")
@@ -299,6 +346,38 @@ def webhook():
 def index():
     """Health check endpoint for Render."""
     return "Attendance Bot is Running ✅", 200
+
+@app.route('/ping')
+def ping():
+    """Lightweight keep-alive ping endpoint."""
+    return "pong", 200
+
+# ---------------------------------------------------------------------------
+# Self-ping keep-alive thread
+# Render free-tier spins down services after ~15 min of inactivity.
+# This thread pings the service every 10 minutes to keep it awake.
+# ---------------------------------------------------------------------------
+def _keep_alive():
+    """Background thread that pings this service every 10 minutes."""
+    # Wait for the app to fully start before pinging
+    time.sleep(30)
+    render_url = os.getenv("RENDER_EXTERNAL_URL", "")
+    if not render_url:
+        logger.info("RENDER_EXTERNAL_URL not set — keep-alive disabled")
+        return
+    ping_url = render_url.rstrip("/") + "/ping"
+    logger.info(f"Keep-alive thread started, will ping {ping_url} every 10 min")
+    while True:
+        try:
+            import urllib.request
+            urllib.request.urlopen(ping_url, timeout=10)
+            logger.info("Keep-alive ping sent")
+        except Exception as e:
+            logger.warning(f"Keep-alive ping failed: {e}")
+        time.sleep(600)  # 10 minutes
+
+_keep_alive_thread = threading.Thread(target=_keep_alive, daemon=True)
+_keep_alive_thread.start()
 
 def main() -> None:
     """Run the bot in polling mode (for local testing only)."""
