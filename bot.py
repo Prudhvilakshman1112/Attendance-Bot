@@ -71,13 +71,22 @@ logger = logging.getLogger(__name__)
 # Initialize Flask app
 app = Flask(__name__)
 
-# Initialize Telegram bot application globally
-ptb_app = Application.builder().token(config.BOT_TOKEN).build()
+# Initialize Telegram bot application globally (with error handling for missing/invalid token)
+ptb_app = None
+if config.BOT_TOKEN:
+    try:
+        ptb_app = Application.builder().token(config.BOT_TOKEN).build()
+        logger.info("Telegram Bot Application built successfully")
+    except Exception as err:
+        logger.error(f"Failed to build Telegram Bot Application with provided BOT_TOKEN: {err}")
+else:
+    logger.error("CRITICAL: BOT_TOKEN environment variable is not set or empty!")
 
 # Queue for updates and event loop management (will be created in event loop thread)
 update_queue = None
 _loop = None
 _loop_thread = None
+
 
 def start_event_loop():
     """Start the event loop in a separate thread."""
@@ -324,6 +333,10 @@ def ensure_event_loop_started():
 @app.route('/webhook', methods=['POST'])
 def webhook():
     """Handle incoming Telegram updates via webhook."""
+    if ptb_app is None:
+        logger.error("Webhook called but ptb_app is None (BOT_TOKEN missing or invalid)")
+        return "Bot Token Not Configured", 500
+
     ensure_event_loop_started()
     
     if request.method == "POST":
@@ -345,7 +358,10 @@ def webhook():
 @app.route('/')
 def index():
     """Health check endpoint for Render."""
+    if ptb_app is None:
+        return "⚠️ Attendance Bot is Running, but BOT_TOKEN environment variable is NOT set in Render! Please set BOT_TOKEN in Render Environment variables.", 500
     return "Attendance Bot is Running ✅", 200
+
 
 @app.route('/ping')
 def ping():
