@@ -12,4 +12,5 @@ services:
       - key: WEB_CONCURRENCY
         value: "1"
       - key: RENDER_EXTERNAL_URL
-        value: https://vignan-attendance-bot.onrender.com
+        value: https://attendance-bot-1.onrender.com
+
