@@ -79,7 +79,7 @@ https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook?url=https://<YOUR_RENDER
 
 **Example**:
 ```
-https://api.telegram.org/bot8288985575:AAGuKH42iISvwMRsQkH408oi_bK2UYSOpUI/setWebhook?url=https://attendance-bot-xyz.onrender.com/webhook
+https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook?url=https://attendance-bot-xyz.onrender.com/webhook
 ```
 
 You should see a JSON response like:
