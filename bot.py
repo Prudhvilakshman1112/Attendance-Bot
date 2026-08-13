@@ -94,16 +94,23 @@ def start_event_loop():
     
     async def process_updates():
         """Process updates from the queue."""
-        await ptb_app.initialize()
-        await ptb_app.start()
-        logger.info("Bot initialized and ready")
-        
+        try:
+            logger.info("Initializing Telegram Bot Application...")
+            await ptb_app.initialize()
+            await ptb_app.start()
+            logger.info("Bot initialized successfully and ready to process updates")
+        except Exception as e:
+            logger.error(f"Failed to initialize Telegram Bot Application: {e}", exc_info=True)
+            return
+
         while True:
             try:
                 update = await update_queue.get()
                 if update is None:
                     break
+                logger.info(f"Processing update {update.update_id}")
                 await ptb_app.process_update(update)
+                logger.info(f"Successfully finished processing update {update.update_id}")
             except Exception as e:
                 logger.error(f"Error processing update: {e}", exc_info=True)
     
@@ -120,6 +127,7 @@ def start_event_loop():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued."""
     user = update.effective_user
+    logger.info(f"Received /start command from user {user.id} ({user.username})")
     welcome_message = (
         f"👋 Hi {user.mention_html()}!\n\n"
         "🎓 <b>Welcome to Vignan ECAP Attendance Bot!</b>\n\n"
@@ -156,19 +164,28 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def handle_credentials(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle credentials sent as a message (username password)."""
+    if not update.message or not update.message.text:
+        return
+        
     text = update.message.text.strip()
+    user = update.effective_user
+    logger.info(f"Received message from user {user.id} ({user.username}): '{text}'")
     parts = text.split(' ', 1)
     
     # Check if it's in the format: username password
-    if len(parts) < 2:
-        return  # Not credentials, ignore
+    if len(parts) < 2 or not parts[0].isalnum() or len(parts[0]) < 5:
+        logger.info(f"Message from user {user.id} is not valid credentials. Sending format instructions.")
+        await update.message.reply_html(
+            "⚠️ <b>Please send your credentials in this format:</b>\n\n"
+            "<code>rollnumber password</code>\n\n"
+            "<b>Example:</b>\n"
+            "<code>23L31A4391 mypassword</code>\n\n"
+            "<i>Send /start to view instructions.</i>"
+        )
+        return
     
     username = parts[0]
     password = parts[1]
-    
-    # Validate username format (basic check)
-    if not username.isalnum() or len(username) < 5:
-        return  # Not a valid username format, ignore
     
     # Delete the message with credentials for security
     try:
